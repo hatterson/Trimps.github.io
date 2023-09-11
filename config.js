@@ -22,7 +22,7 @@ function newGame () {
 var toReturn = {
 	global: {
 		//New and accurate version
-		stringVersion: '5.9.2',
+		stringVersion: '5.9.3',
 		//Leave 'version' at 4.914 forever, for compatability with old saves
 		version: 4.914,
 		isBeta: false,
@@ -161,6 +161,7 @@ var toReturn = {
 		mutationSeed: Math.floor(Math.random() * 1000000),
 		u2MutationSeed: Math.floor(Math.random() * 1000000),
 		enemySeed: Math.floor(Math.random() * 1000000),
+		randimpSeed: Math.floor(Math.random() * 1000000),
 		u2WorldSeed: Math.floor(Math.random() * 1000000),
 		reincarnateSeed: Math.floor(Math.random() * 1000000),
 		//not to be confused with mutation seed of course
@@ -8533,8 +8534,15 @@ var toReturn = {
 						imports.push(item);
 					}
 				}
-				var enemySeed = (game.global.mapsActive) ? Math.floor(Math.random() * 10000000) : game.global.enemySeed++;
-				var selected = imports[getRandomIntSeeded(enemySeed, 0, imports.length)];
+				var selected = "";
+				if (game.global.mapsActive) {
+					//randimps in maps are random
+					selected = imports[getRandomIntSeeded(Math.floor(Math.random() * 10000000), 0, imports.length)];
+				}
+				else {
+					selected = imports[game.global.randimpSeed++ % imports.length];
+				}
+				
 				game.badGuys[selected].loot(level, true);
 			}
 		},

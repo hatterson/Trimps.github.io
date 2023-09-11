@@ -4197,6 +4197,7 @@ function resetGame(keepPortal, resetting) {
 	var bestHeirloomSeed;
 	var mutatedSeeds;
 	var mutatedSeedsSpent;
+	var randimpSeed;
 	var showU2MutNames;
 	var empowerments;
 	var spiresCompleted;
@@ -4334,6 +4335,7 @@ function resetGame(keepPortal, resetting) {
 		bestHeirloomSeed = game.global.bestHeirloomSeed;
 		mutatedSeeds = game.global.mutatedSeeds;
 		mutatedSeedsSpent = game.global.mutatedSeedsSpent;
+		randimpSeed = game.global.randimpSeed;
 		showU2MutNames = game.global.showU2MutNames;
 		voidMaxLevel = game.global.voidMaxLevel;
 		voidMaxLevel2 = game.global.voidMaxLevel2;
@@ -4494,6 +4496,7 @@ function resetGame(keepPortal, resetting) {
 		game.global.heirloomSeed = heirloomSeed;
 		game.global.coreSeed = coreSeed;
 		game.global.bestHeirloomSeed = bestHeirloomSeed;
+		game.global.randimpSeed = randimpSeed;
 		game.global.mutatedSeeds = mutatedSeeds;
 		game.global.mutatedSeedsSpent = mutatedSeedsSpent;
 		game.global.showU2MutNames = showU2MutNames;
@@ -4625,6 +4628,17 @@ function resetGame(keepPortal, resetting) {
 		else if (game.global.universe == 2 && game.global.challengeActive == "Desolation"){
 			game.global.u2MutationSeed = stringToSeed("Aug")
 		}
+
+		if (game.global.challengeActive == "Daily" && game.global.dailyChallenge.seed){
+			game.global.enemySeed = getRandomIntSeeded(game.global.dailyChallenge.seed, 0, 1000000);
+		}
+		else if (game.global.runningChallengeSquared){
+			game.global.enemySeed = stringToSeed(game.global.challengeActive);
+		}
+		else if (game.global.challengeActive == "Desolation"){
+			game.global.enemySeed = stringToSeed("Aug");
+		}		
+
 	}
 	else {
 		game.options.menu.darkTheme.enabled = 1;

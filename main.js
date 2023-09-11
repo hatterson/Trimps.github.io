@@ -1064,6 +1064,10 @@ function load(saveString, autoLoad, fromPf) {
 		getHazardParityMult();
 		getHazardGammaBonus();
 	}
+	if (compareVersion([5,9,2], oldStringVersion)){ 
+		game.global.randimpSeed = Math.floor(Math.random() * 1000000);
+	}
+
 	//End compatibility
 	//Test server only
 
@@ -9481,7 +9485,6 @@ function getMagmiteDecayAmt(){
 	return rate;
 }
 
-var canSkeletimp = false;
 function buildGrid() {
     var world = game.global.world;
     var array = [];
@@ -9493,10 +9496,6 @@ function buildGrid() {
 			imports.push(item);
 		}
 	}
-	canSkeletimp = false;
-	var skeleMin = 2700000;
-	if (game.talents.skeletimp2.purchased) skeleMin -= 600000
-	if ((new Date().getTime() - game.global.lastSkeletimp) >= skeleMin) canSkeletimp = true;
 	var corrupteds = [];
 	for (var w = 0; w < 100; w++){
 		corrupteds.push("");
@@ -9518,6 +9517,9 @@ function buildGrid() {
 	var needsEmpower = false;
 	if (game.global.challengeActive != "Eradicated" && game.global.world > 236 && game.global.world % 5 == 1)
 		needsEmpower = true;
+
+	var specials = generateSpecialEnemyPositions(world, imports);
+
     for (var i = 0; i < 100; i++) {
         var newCell = {
             level: i + 1,
@@ -9526,8 +9528,15 @@ function buildGrid() {
             attack: -1,
             special: "",
             text: "",
-            name: getRandomBadGuy(null, i + 1, 100, world, imports, corrupteds[i], vms[i])
+            name: ""
         };
+		//If a special is assigned to this cell use that name, otherwise generate a random
+		if (specials[i]) {
+			newCell.name = specials[i];
+		}
+		else {
+			newCell.name = getRandomBadGuy(null, i + 1, 100, world, imports, corrupteds[i], vms[i]);
+		}
 		if (game.global.universe == 2){
 			newCell.u2Mutation = [];
 		}
@@ -9550,6 +9559,102 @@ function buildGrid() {
 	}
     game.global.gridArray = array;
     addSpecials();
+}
+
+//This function generates the cell positions of imports, randimps, mutimps, hulking mutimps, and skeletimps
+//First potentially add skeletimp, then imports, then randimps, then (hulking) mutimps
+//If there is not enough space to add all mutimps, don't add max
+//Skeletimps, imports, and randimps can generate in 1-99
+//Mutimps depend on daily settings
+function generateSpecialEnemyPositions(worldLevel, importList) {
+
+	var specialsToAdd = [];
+	var specialNames = [];
+	for (var i = 0; i < 99; i++){
+		specialNames.push("");
+	}
+
+	//Check skeletimp
+	if (checkIfSkeletimp()) {
+		specialsToAdd.push((getRandomIntSeeded(game.global.skeleSeed++, 0, 100) < ((game.talents.skeletimp.purchased) ? 20 : 10)) ? "Megaskeletimp" : "Skeletimp");
+	}
+
+	//Now add imports
+	//Imports generate 3 of each unlocked type per zone. Scruffy level 9 adds 1 every other zone. Each level of More Imports adds 1 every 20 zones. 4 per zone of each at max.
+	if (importList.length > 0) {
+		var impCount = 3;
+		//On even cells check exotic reward
+		if ((worldLevel % 2 == 0) && Fluffy.isRewardActive("exotic") ) impCount++;
+
+		//on odd cells, check if we have enough perma bone bonuses to get another
+		if ((worldLevel % 2 == 1) && Math.floor(((worldLevel) % 20) / 2) < game.permaBoneBonuses.exotic.owned) impCount++;
+
+		for (var i=0; i<importList.length; i++) {
+			for (var j=0; j<impCount; j++) {
+				specialsToAdd.push(importList[i]);
+			}
+		}
+	}
+
+	//Now add randimps
+	//Randimps generate 2 per zone
+	if (game.talents.magimp.purchased) {
+		specialsToAdd.push("Magimp");
+		specialsToAdd.push("Magimp");
+	}
+
+	//If more enemies are added that need fixed generation and are able to be put in all 1-99 cells, add them here.
+	//If ever enough enemies are added to push this over 99, additional logic will have to be added to avoid an infinite loop looking for a spare cell
+	//Mutimps or other future enemies that have potentially limited cells are added after.
+
+	//Now assign cell numbers to the ones we need to add.
+
+	var homeFound = false;
+	var tmpIndex = -1;
+	while(specialsToAdd.length>0) {
+		homeFound = false;
+		while (!homeFound) {
+			tmpIndex = getRandomIntSeeded(game.global.enemySeed++, 0, 99);  //Generated from 0-98
+			if (!specialNames[tmpIndex]) {
+				specialNames[tmpIndex] = specialsToAdd.pop();
+				homeFound = true;
+			}
+		}
+	}
+
+	//Now check mutimps
+
+	if (game.global.challengeActive == "Daily"  && typeof game.global.dailyChallenge.mutimps !== 'undefined'){
+		//We're on a daily that has mutimps
+		var mutStr = game.global.dailyChallenge.mutimps.strength;
+		var maxCell = dailyModifiers.mutimps.getMaxCellNum(mutStr);
+		//There are 4 * num of rows that need to be added
+		var mutCount = Math.ceil(maxCell / 10) * 4; 
+		var name = mutStr < 6 ? "Mutimp" : "Hulking_Mutimp";
+
+		//Get all possible cells to add them to, pick one at random, add to that cell, then repeat until we run out of cell or mutimps to add
+		var possibleCells = [];
+		for (var i = 0; i < maxCell; i++){
+			if (!specialNames[i]) possibleCells.push(i);
+		}
+
+		while (possibleCells.length > 0 && mutCount > 0) {
+			tmpIndex = getRandomIntSeeded(game.global.enemySeed++, 0, possibleCells.length);
+			specialNames[possibleCells[tmpIndex]] = name;
+			possibleCells[tmpIndex] = possibleCells.pop();
+			mutCount--;
+		}
+	}
+
+	return specialNames;
+}
+
+//Returns true if zone map generation should include Skeletimp, false otherwise.
+function checkIfSkeletimp() {
+	var skeleMin = 2700000;
+	if (game.talents.skeletimp2.purchased) skeleMin -= 600000
+	if ((new Date().getTime() - game.global.lastSkeletimp) >= skeleMin) return true;
+	return false;
 }
 
 function getSeededRandomFromArray(seed, array){
@@ -9605,7 +9710,7 @@ function setVoidCorruptionIcon(regularMap){
 function getRandomBadGuy(mapSuffix, level, totalCells, world, imports, mutation, visualMutation, fastOnly) {
 	var selected;
 	var force = false;
-	var enemySeed = (mapSuffix) ? Math.floor(Math.random() * 10000000) : game.global.enemySeed;
+	var enemySeed = Math.floor(Math.random() * 10000000);
 	var badGuysArray = [];
 	if (mapSuffix == "Darkness") imports = [];
     for (var item in game.badGuys) {
@@ -9635,16 +9740,10 @@ function getRandomBadGuy(mapSuffix, level, totalCells, world, imports, mutation,
 			badGuysArray.push(item);
 		}
 	}
-	if (!mapSuffix && canSkeletimp && !force && (getRandomIntSeeded(enemySeed++, 0, 100) < 5)) {
-		canSkeletimp = false;
-		game.global.enemySeed = enemySeed;
-		return (getRandomIntSeeded(game.global.skeleSeed++, 0, 100) < ((game.talents.skeletimp.purchased) ? 20 : 10)) ? "Megaskeletimp" : "Skeletimp";
-	}
 	var exoticChance = 3;
 	if (Fluffy.isRewardActive("exotic")) exoticChance += 0.5;
 	if (game.permaBoneBonuses.exotic.owned > 0) exoticChance += game.permaBoneBonuses.exotic.addChance();
-	if (imports.length && !force && ((getRandomIntSeeded(enemySeed++, 0, 1000) / 10) < (imports.length * exoticChance))){
-		if (!mapSuffix) game.global.enemySeed = enemySeed;
+	if (mapSuffix && imports.length && !force && ((getRandomIntSeeded(enemySeed++, 0, 1000) / 10) < (imports.length * exoticChance))){
 		return imports[getRandomIntSeeded(enemySeed++, 0, imports.length)];
 	}
 	if (!mapSuffix && !force) {
@@ -9653,41 +9752,27 @@ function getRandomBadGuy(mapSuffix, level, totalCells, world, imports, mutation,
 		if (game.talents.turkimp.purchased) chance *= 1.33;
 		var roll = getRandomIntSeeded(enemySeed++, 0, 100000);
 		if (roll < chance) {
-			if (!mapSuffix) game.global.enemySeed = enemySeed;
 			return "Turkimp";
 		}
 	}
-	if (game.talents.magimp.purchased && mapSuffix != "Darkness" && !force){
+	if (mapSuffix && game.talents.magimp.purchased && mapSuffix != "Darkness" && !force){
 		var chance = 2 * (1 / (100 - 1 - (exoticChance * imports.length)));
 		chance = Math.round(chance * 100000);
 		var roll = getRandomIntSeeded(enemySeed++, 0, 100000);
 		if (roll < chance) {
-			if (!mapSuffix) game.global.enemySeed = enemySeed;
 			return "Magimp";
 		}
 	}
 	//Halloween
 	if (!mapSuffix && !force && visualMutation == 'Pumpkimp'){
 		if (getRandomIntSeeded(enemySeed++, 0, 10) < 5){
-			game.global.enemySeed = enemySeed;
-			 return "Pumpkimp";
+			return "Pumpkimp";
 		}
 	}
 	if (game.global.challengeActive == "Insanity" && mapSuffix && !force){
 		if (getRandomIntSeeded(enemySeed++,0,10000) < (game.challenges.Insanity.getHorrimpChance(world) * 100)) return "Horrimp";
 	}
-	if (game.global.challengeActive == "Daily"  && typeof game.global.dailyChallenge.mutimps !== 'undefined' && !mapSuffix && !force){
-		var mutStr = game.global.dailyChallenge.mutimps.strength;
-		if (level <= dailyModifiers.mutimps.getMaxCellNum(mutStr)){
-			var mobName = mutStr < 6 ? "Mutimp" : "Hulking_Mutimp";
-			if (getRandomIntSeeded(enemySeed++, 0, 10) < 4){
-				game.global.enemySeed = enemySeed;
-				return mobName;
-			}
-		}
-	}
 	if (!force) selected = badGuysArray[getRandomIntSeeded(enemySeed++, 0, badGuysArray.length)];
-	if (!mapSuffix) game.global.enemySeed = enemySeed;
 	return selected;
 
 }
